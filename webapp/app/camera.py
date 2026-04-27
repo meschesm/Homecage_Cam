@@ -95,9 +95,9 @@ def _parse_formats(node: str) -> list[FormatMode]:
 
 def discover_cameras() -> list[CameraInfo]:
     """
-    Find all UVC cameras via sysfs, group by USB product ID,
-    identify capture and H264 passthrough nodes.
+    Find all cameras: UVC via sysfs/v4l2-ctl, and FLIR via aravis.
     """
+    from .flir import discover_flir_cameras
     # Collect all UVC nodes with their USB product string
     uvc: dict[str, str] = {}  # node → PRODUCT
     for node_path in sorted(Path("/dev").glob("video*"),
@@ -163,4 +163,5 @@ def discover_cameras() -> list[CameraInfo]:
             modes=all_modes,
         ))
 
+    cameras += discover_flir_cameras()
     return cameras

@@ -16,7 +16,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
+
+log = logging.getLogger(__name__)
 import shutil
 import signal
 import time
@@ -27,6 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import settings
+from .flir import FlirCapture, build_flir_cmd, is_flir, serial_from_node
 from .storage import storage_manager
 from .utils import FMT_MAP, fmt_bytes
 
@@ -284,7 +288,13 @@ async def _run_stream(stream: StreamStatus) -> None:
     stream.segments_dir      = str(segs_dir)
     stream.segment_list_path = seg_list_path
 
-    cmd     = _build_cmd(stream.params, seg_pattern, seg_list_path)
+    _is_flir = is_flir(stream.node)
+
+    if _is_flir:
+        cmd = build_flir_cmd(stream.params, seg_pattern, seg_list_path, SEGMENT_DURATION)
+    else:
+        cmd = _build_cmd(stream.params, seg_pattern, seg_list_path)
+
     t_start = time.monotonic()
     stream.status = "running"
 
@@ -293,12 +303,29 @@ async def _run_stream(stream: StreamStatus) -> None:
         Path(f"/tmp/hcv3_preview_{Path(stream.node).name}.jpg") if not is_copy else None
     )
 
+    flir_capture: FlirCapture | None = None
+
     try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        if _is_flir:
+            flir_capture = FlirCapture(
+                serial_from_node(stream.node),
+                int(stream.params.get("width",  1440)),
+                int(stream.params.get("height", 1080)),
+                float(stream.params.get("fps",  10)),
+            )
+            flir_capture.start()
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        else:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
+            )
         stream.proc = proc
 
         async def _read_stderr():
@@ -319,7 +346,35 @@ async def _run_stream(stream: StreamStatus) -> None:
                     pass
                 await asyncio.sleep(1.0)
 
-        await asyncio.gather(_read_stderr(), _tick())
+        if _is_flir and flir_capture:
+            _cap = flir_capture
+            loop = asyncio.get_event_loop()
+
+            async def _feed_stdin():
+                try:
+                    while proc.returncode is None:
+                        frame = await loop.run_in_executor(None, _cap.get, 2.0)
+                        if frame is None:
+                            break
+                        if proc.stdin.is_closing():
+                            break
+                        proc.stdin.write(frame)
+                        await proc.stdin.drain()
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+                except Exception as exc:
+                    log.debug("FLIR stdin feeder done: %s", exc)
+                finally:
+                    try:
+                        proc.stdin.close()
+                        await proc.stdin.wait_closed()
+                    except Exception:
+                        pass
+
+            await asyncio.gather(_read_stderr(), _tick(), _feed_stdin())
+        else:
+            await asyncio.gather(_read_stderr(), _tick())
+
         await proc.wait()
 
         stream.elapsed = time.monotonic() - t_start
@@ -348,6 +403,8 @@ async def _run_stream(stream: StreamStatus) -> None:
         stream.error   = str(exc)
         stream.elapsed = time.monotonic() - t_start
     finally:
+        if flir_capture:
+            flir_capture.stop()
         if preview_path:
             preview_path.unlink(missing_ok=True)
 

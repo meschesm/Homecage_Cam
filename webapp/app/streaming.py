@@ -45,11 +45,17 @@ async def stop_stream(node: str):
     log.info("Stream stopped: %s", node)
 
 
-async def stream_frames(node: str, input_fmt: str = "mjpeg") -> AsyncGenerator[bytes, None]:
+async def stream_frames(node: str, input_fmt: str = "mjpeg") -> AsyncGenerator[bytes, None]:  # noqa: C901
     """
     Async generator — yields raw multipart chunks suitable for StreamingResponse.
-    Starts ffmpeg on first call, cleans up on generator close (client disconnect).
+    Handles both UVC (V4L2) and FLIR (aravis) nodes.
     """
+    from .flir import is_flir, flir_stream_frames
+    if is_flir(node):
+        async for chunk in flir_stream_frames(node):
+            yield chunk
+        return
+
     if is_streaming(node):
         # Another request is already streaming this node — reject
         raise RuntimeError(f"{node} is already streaming")

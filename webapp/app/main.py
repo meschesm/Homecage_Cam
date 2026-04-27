@@ -134,9 +134,12 @@ async def api_camera_settings_post(request: Request, _: str = Depends(require_au
 
 @app.get("/stream/{node_name}")
 async def stream(node_name: str, _: str = Depends(require_auth_api)):
-    """Live MJPEG stream for a camera node (e.g. video0, video5)."""
-    node = f"/dev/{node_name}"
-    if not node_name.startswith("video"):
+    """Live MJPEG stream for a camera node (e.g. video0, flir_18474893)."""
+    if node_name.startswith("flir_"):
+        node = node_name
+    elif node_name.startswith("video"):
+        node = f"/dev/{node_name}"
+    else:
         return JSONResponse({"error": "Invalid node"}, status_code=400)
     try:
         return StreamingResponse(
@@ -149,7 +152,8 @@ async def stream(node_name: str, _: str = Depends(require_auth_api)):
 
 @app.delete("/stream/{node_name}")
 async def stream_stop(node_name: str, _: str = Depends(require_auth_api)):
-    await stop_stream(f"/dev/{node_name}")
+    node = node_name if node_name.startswith("flir_") else f"/dev/{node_name}"
+    await stop_stream(node)
     return {"stopped": node_name}
 
 
@@ -355,7 +359,7 @@ async def api_job_log(_: str = Depends(require_auth_api)):
 @app.get("/api/preview/{node_name}")
 async def api_preview(node_name: str, _: str = Depends(require_auth_api)):
     """Return the latest preview JPEG grabbed from the in-progress recording segment."""
-    if not node_name.startswith("video"):
+    if not (node_name.startswith("video") or node_name.startswith("flir_")):
         return JSONResponse({"error": "Invalid node"}, status_code=400)
     path = Path(f"/tmp/hcv3_preview_{node_name}.jpg")
     if not path.exists():
