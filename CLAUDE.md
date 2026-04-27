@@ -4,10 +4,12 @@
 
 | Branch | Device | Purpose |
 |--------|--------|---------|
-| `dev` | cam1 (`100.81.80.110`) | Development and testing |
-| `main` | cam2 (`100.70.127.43`) | Production |
+| `dev` | cam1 (`100.81.80.110`) | Development and testing (UVC cameras) |
+| `main` | cam2 (`100.70.127.43`) | Production (UVC cameras) |
+| `dev-flir` | cam1 (`100.81.80.110`) | FLIR Blackfly S (BFS-U3-16S2M-CS) integration |
 
 **Workflow:** develop and test on `dev` → cam1, then merge to `main` and deploy to cam2.
+FLIR work happens exclusively on `dev-flir` — never merge into `main` until fully validated.
 
 ```bash
 # Merge dev into main and deploy to cam2:
