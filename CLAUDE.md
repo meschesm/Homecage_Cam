@@ -1,5 +1,20 @@
 # homecagev3 — Project Context for Claude
 
+## Branch Strategy
+
+| Branch | Device | Purpose |
+|--------|--------|---------|
+| `dev` | cam1 (`100.81.80.110`) | Development and testing |
+| `main` | cam2 (`100.70.127.43`) | Production |
+
+**Workflow:** develop and test on `dev` → cam1, then merge to `main` and deploy to cam2.
+
+```bash
+# Merge dev into main and deploy to cam2:
+git checkout main && git merge dev && git push
+# then deploy files to cam2 and restart service
+```
+
 ## What This Project Is
 Overnight behavioral video recording system for rodent home cages. Records from multiple USB cameras simultaneously on a Raspberry Pi 5, storing footage to an external USB drive.
 
