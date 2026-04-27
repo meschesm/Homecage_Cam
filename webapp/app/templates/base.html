@@ -225,7 +225,8 @@
 <body>
   {% block nav %}
   <nav>
-    <span class="brand">homecagev3 <span style="font-size:0.7rem;font-weight:400;color:var(--muted);">v1.26</span></span>
+    <span class="brand">homecagev3 <span style="font-size:0.7rem;font-weight:400;color:var(--muted);">v1.27</span></span>
+    {% if hostname is defined %}<span style="font-size:0.82rem;font-weight:600;color:var(--accent2);margin-left:0.25rem;">{{ hostname }}</span>{% endif %}
     <a href="/recording">Recording</a>
     <a href="/camera-test">Camera Test</a>
     <div class="spacer"></div>

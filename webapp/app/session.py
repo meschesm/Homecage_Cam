@@ -170,11 +170,16 @@ def _build_cmd(params: dict, segment_pattern: str, segment_list_path: str) -> li
                 r":x=w-tw-10:y=h-th-10:fontsize=36"
                 r":fontcolor=white@0.9:box=1:boxcolor=black@0.4:boxborderw=4"
             )
-        # Split: [rec] → full recording chain; [prev] → 1 frame per 10 s preview
+        # Split: [rec] → full recording chain; [prev] → 1 frame per 10 s preview with timestamp
+        prev_ts = (
+            r"drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+            r":text='%{localtime\:%D %T}'"
+            r":x=10:y=10:fontsize=28:fontcolor=white@0.9:box=1:boxcolor=black@0.5:boxborderw=4"
+        )
         filter_complex = (
             "[0:v]split=2[_m][_r];"
             "[_m]" + ",".join(rec_filters) + "[rec];"
-            "[_r]fps=1/10[prev]"
+            "[_r]fps=1/10," + prev_ts + "[prev]"
         )
         cmd += ["-filter_complex", filter_complex, "-map", "[rec]"]
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import shutil
+import socket
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -24,6 +25,7 @@ from .streaming import get_active_streams, is_streaming, stop_stream, stream_fra
 from .utils    import fmt_bytes
 
 app = FastAPI(title="homecagev3", docs_url=None, redoc_url=None)
+_hostname = socket.gethostname()
 
 
 @app.on_event("startup")
@@ -75,14 +77,14 @@ async def index(_: str = Depends(require_auth)):
 @app.get("/camera-test", response_class=HTMLResponse)
 async def camera_test_page(request: Request, user: str = Depends(require_auth)):
     return _templates.TemplateResponse(
-        "camera_test.html", {"request": request, "user": user}
+        "camera_test.html", {"request": request, "user": user, "hostname": _hostname}
     )
 
 
 @app.get("/recording", response_class=HTMLResponse)
 async def recording_page(request: Request, user: str = Depends(require_auth)):
     return _templates.TemplateResponse(
-        "session.html", {"request": request, "user": user}
+        "session.html", {"request": request, "user": user, "hostname": _hostname}
     )
 
 
