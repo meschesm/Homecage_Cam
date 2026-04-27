@@ -5,10 +5,17 @@ Overnight behavioral video recording system for rodent home cages. Records from 
 
 ## Hardware
 
+**cam1** — Raspberry Pi 5
+- IP: `100.81.80.110` (Tailscale)
+- SSH alias: `cam1` (key auth, user `ab-ivnc`)
+- OS: Raspberry Pi OS (Debian 12)
+- App: `http://100.81.80.110` (login: ab-ivnc)
+
 **cam2** — Raspberry Pi 5 Model B Rev 1.1
 - IP: `100.70.127.43` (Tailscale)
 - SSH alias: `cam2` (key auth, user `ab-ivnc`)
 - OS: Raspberry Pi OS (Debian 12), kernel 6.12.62+rpt-rpi-2712
+- App: `http://100.70.127.43` (login: admin)
 
 **Cameras** (2+ physical USB cameras, all UVC/uvcvideo driver):
 | Name | USB ID | Capture Node |
@@ -42,23 +49,27 @@ The main interface is a FastAPI web app deployed on cam2 as a systemd service be
 | `webapp/app/templates/camera_test.html` | Per-camera test UI — live preview, test config panel, batch format testing, job history |
 | `webapp/app/templates/login.html` | Login page |
 
-**Deploy files to cam2:**
+**Deploy files (run from project root):**
 ```bash
-# Individual files (run from project root):
-scp webapp/app/main.py cam2:~/homecagev3/app/main.py
-scp webapp/app/session.py cam2:~/homecagev3/app/session.py
-scp webapp/app/recording.py cam2:~/homecagev3/app/recording.py
-scp webapp/app/storage.py cam2:~/homecagev3/app/storage.py
-scp webapp/app/utils.py cam2:~/homecagev3/app/utils.py
-scp webapp/app/templates/session.html cam2:~/homecagev3/app/templates/session.html
-scp webapp/app/templates/camera_test.html cam2:~/homecagev3/app/templates/camera_test.html
-scp webapp/app/templates/base.html cam2:~/homecagev3/app/templates/base.html
-
-# Restart service after deploy:
-ssh cam2 'sudo systemctl restart homecagev3'
+# Deploy to both cam1 and cam2:
+for CAM in cam1 cam2; do
+  scp webapp/app/main.py $CAM:~/homecagev3/app/main.py
+  scp webapp/app/session.py $CAM:~/homecagev3/app/session.py
+  scp webapp/app/recording.py $CAM:~/homecagev3/app/recording.py
+  scp webapp/app/storage.py $CAM:~/homecagev3/app/storage.py
+  scp webapp/app/utils.py $CAM:~/homecagev3/app/utils.py
+  scp webapp/app/templates/session.html $CAM:~/homecagev3/app/templates/session.html
+  scp webapp/app/templates/camera_test.html $CAM:~/homecagev3/app/templates/camera_test.html
+  scp webapp/app/templates/base.html $CAM:~/homecagev3/app/templates/base.html
+  ssh $CAM 'sudo systemctl restart homecagev3'
+done
 ```
 
-**Access:** `http://100.70.127.43/` (requires Tailscale) → redirects to `/camera-test`
+**Note:** cam2 app files live at `~/homecagev3/app/`; cam1 at `~/homecagev3/webapp/app/` (repo layout). See deploy paths above.
+
+**Access:**
+- cam1: `http://100.81.80.110/` (requires Tailscale)
+- cam2: `http://100.70.127.43/` (requires Tailscale)
 
 ## Recording Architecture
 
