@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Login — homecagev3{% endblock %}
+
+{% block nav %}{% endblock %}
+
+{% block content %}
+<style>
+  body { display: flex; align-items: center; justify-content: center; }
+  .login-wrap {
+    width: 100%;
+    max-width: 380px;
+    margin-top: -4rem;
+  }
+  .login-brand {
+    text-align: center;
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.06em;
+    margin-bottom: 0.25rem;
+  }
+  .login-sub {
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-bottom: 1.75rem;
+  }
+  .login-wrap button { width: 100%; justify-content: center; padding: 0.6rem; }
+</style>
+
+<div class="login-wrap">
+  <div class="login-brand">homecagev3</div>
+  <div class="login-sub">Raspberry Pi 5 · Behavioral Recording</div>
+
+  {% if error %}
+  <div class="alert alert-error">{{ error }}</div>
+  {% endif %}
+
+  <div class="card">
+    <form method="post" action="/login">
+      <input type="hidden" name="next" value="{{ next }}">
+
+      <label for="username">Username</label>
+      <input type="text" id="username" name="username" autocomplete="username"
+             autofocus required>
+
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password"
+             autocomplete="current-password" required>
+
+      <button type="submit">Sign in</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

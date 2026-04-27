@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}homecagev3{% endblock %}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0f1117;
+      --surface:  #1c1f2e;
+      --border:   #2e3250;
+      --accent:   #4f8ef7;
+      --accent2:  #34d399;
+      --danger:   #f87171;
+      --warn:     #fbbf24;
+      --text:     #e2e8f0;
+      --muted:    #94a3b8;
+      --radius:   8px;
+      --mono:     'Courier New', monospace;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    nav {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 2rem;
+      height: 48px;
+    }
+
+    nav .brand {
+      font-weight: 700;
+      font-size: 1rem;
+      color: var(--accent);
+      letter-spacing: 0.05em;
+    }
+
+    nav a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.85rem;
+      transition: color 0.15s;
+    }
+    nav a:hover { color: var(--text); }
+
+    nav .spacer { flex: 1; }
+
+    nav .user {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
+    }
+
+    h1 { font-size: 1.4rem; font-weight: 600; margin-bottom: 0.25rem; }
+    h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem; color: var(--muted); }
+    h3 { font-size: 0.95rem; font-weight: 600; margin-bottom: 0.75rem; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .row { display: flex; gap: 1.25rem; flex-wrap: wrap; }
+    .col { flex: 1; min-width: 260px; }
+
+    label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.3rem; }
+
+    select, input[type=number], input[type=text], input[type=password] {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      color: var(--text);
+      padding: 0.45rem 0.65rem;
+      font-size: 0.85rem;
+      appearance: none;
+      margin-bottom: 0.85rem;
+    }
+    select:focus, input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.85rem;
+    }
+    .checkbox-row input[type=checkbox] { width: auto; margin: 0; }
+    .checkbox-row label { margin: 0; font-size: 0.85rem; color: var(--text); }
+
+    button, .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      padding: 0.5rem 1.1rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      text-decoration: none;
+    }
+    button:hover, .btn:hover { opacity: 0.85; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-danger { background: var(--danger); }
+    .btn-muted  { background: var(--border); color: var(--text); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+    th {
+      text-align: left;
+      color: var(--muted);
+      font-weight: 600;
+      padding: 0.4rem 0.6rem;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 0.4rem 0.6rem;
+      border-bottom: 1px solid #1a1e30;
+    }
+    tr:last-child td { border-bottom: none; }
+
+    .badge {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge-green  { background: #064e3b; color: var(--accent2); }
+    .badge-blue   { background: #1e3a5f; color: var(--accent); }
+    .badge-yellow { background: #4a3000; color: var(--warn); }
+    .badge-red    { background: #450a0a; color: var(--danger); }
+
+    .mono { font-family: var(--mono); font-size: 0.8rem; color: var(--muted); }
+
+    .progress-bar {
+      width: 100%;
+      height: 6px;
+      background: var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+      margin: 0.5rem 0;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 3px;
+      transition: width 0.4s ease;
+    }
+
+    .alert {
+      padding: 0.65rem 1rem;
+      border-radius: var(--radius);
+      font-size: 0.85rem;
+      margin-bottom: 1rem;
+    }
+    .alert-error   { background: #450a0a; border: 1px solid var(--danger); color: var(--danger); }
+    .alert-success { background: #064e3b; border: 1px solid var(--accent2); color: var(--accent2); }
+    .alert-info    { background: #1e3a5f; border: 1px solid var(--accent);  color: var(--accent); }
+
+    .hidden { display: none !important; }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 0.75rem;
+      margin-top: 0.75rem;
+    }
+    .stat {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.65rem 0.85rem;
+    }
+    .stat-label { font-size: 0.72rem; color: var(--muted); margin-bottom: 0.2rem; }
+    .stat-value { font-size: 1.05rem; font-weight: 700; color: var(--text); }
+    .stat-value.good { color: var(--accent2); }
+    .stat-value.warn { color: var(--warn); }
+    .stat-value.bad  { color: var(--danger); }
+
+    .stderr-log {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 0.65rem;
+      max-height: 150px;
+      overflow-y: auto;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--warn);
+      margin-top: 0.75rem;
+    }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+  {% block nav %}
+  <nav>
+    <span class="brand">homecagev3 <span style="font-size:0.7rem;font-weight:400;color:var(--muted);">v1.26</span></span>
+    <a href="/recording">Recording</a>
+    <a href="/camera-test">Camera Test</a>
+    <div class="spacer"></div>
+    {% if user is defined %}
+      <span class="user">{{ user }}</span>
+      <button class="btn-danger" onclick="shutdownPi(event)"
+              style="padding:0.3rem 0.75rem;font-size:0.8rem;">Power Down</button>
+      <a href="/logout">Logout</a>
+    {% endif %}
+  </nav>
+  {% endblock %}
+
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  <script>
+  async function shutdownPi(ev) {
+    if (!confirm('Stop all recordings and power down the Pi?')) return;
+    const btn = ev.currentTarget;
+    btn.disabled = true;
+    btn.textContent = 'Shutting down\u2026';
+    try {
+      await fetch('/api/shutdown', { method: 'POST' });
+      btn.textContent = 'Pi is powering down';
+    } catch (_) {
+      btn.disabled = false;
+      btn.textContent = 'Power Down';
+      alert('Shutdown request failed.');
+    }
+  }
+  </script>
+</body>
+</html>

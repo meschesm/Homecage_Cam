@@ -1,0 +1,815 @@
+{% extends "base.html" %}
+{% block title %}Recording — homecagev3{% endblock %}
+
+{% block content %}
+<h1>Test Recording</h1>
+<h2>Configure and start a multi-camera recording session</h2>
+
+<!-- Drive panel -->
+<div class="card" id="driveCard">
+  <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;">
+    <select id="driveSelect" onchange="selectDrive()"
+            style="flex:1;min-width:180px;margin-bottom:0;"></select>
+    <button onclick="ejectDrive()" id="ejectBtn" class="btn-muted"
+            style="padding:0.3rem 0.75rem;font-size:0.78rem;" disabled>&#9167; Eject</button>
+    <button onclick="loadStorage()" class="btn-muted"
+            style="padding:0.3rem 0.75rem;font-size:0.78rem;">&#8634;</button>
+  </div>
+  <div id="driveSpaceRow" style="display:none;margin-top:0.6rem;">
+    <div style="display:flex;align-items:center;gap:0.4rem;margin-bottom:0.25rem;flex-wrap:wrap;">
+      <span style="font-size:0.82rem;color:var(--muted);">Storage —</span>
+      <span id="driveFree" class="mono" style="font-size:0.82rem;">—</span>
+      <span style="font-size:0.82rem;color:var(--muted);">free of</span>
+      <span id="driveTotal" class="mono" style="font-size:0.82rem;">—</span>
+      <span id="drivePct" class="mono" style="font-size:0.82rem;margin-left:auto;"></span>
+    </div>
+    <div class="progress-bar" style="height:8px;">
+      <div class="progress-bar-fill" id="driveFill" style="width:0%;background:var(--accent2);"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Config (hidden while session running) -->
+<div id="configSection">
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+      <h3 style="margin:0;">Camera Configuration</h3>
+      <button onclick="loadCameras()" id="refreshBtn" class="btn-muted"
+              style="padding:0.3rem 0.75rem;font-size:0.78rem;">&#8634; Refresh</button>
+    </div>
+    <div id="cameraConfig"><span class="muted">Loading cameras...</span></div>
+  </div>
+
+  <div class="card">
+    <h3>Session Settings</h3>
+    <div class="row">
+      <div class="col">
+        <label>Session name <span style="font-size:0.72rem;color:var(--muted);">(becomes folder name)</span></label>
+        <input type="text" id="sessionName" value="session" placeholder="e.g. baseline_day1">
+      </div>
+      <div class="col">
+        <label>Duration</label>
+        <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;">
+          <input type="number" id="durationHours" value="0" min="0" max="24"
+                 style="width:70px;margin-bottom:0;">
+          <span style="font-size:0.82rem;color:var(--muted);">hr</span>
+          <input type="number" id="durationMinutes" value="0" min="0" max="59"
+                 style="width:70px;margin-bottom:0;">
+          <span style="font-size:0.82rem;color:var(--muted);">min &nbsp;(0 hr 0 min = run until stopped)</span>
+        </div>
+      </div>
+      <div class="col">
+        <label>Estimated storage (lit room, worst case)</label>
+        <div id="storageEst" class="mono" style="color:var(--accent2);font-size:0.9rem;padding-top:0.3rem;">—</div>
+      </div>
+    </div>
+    <div style="margin-top:1rem;display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap;">
+      <button id="startBtn" onclick="startSession()" disabled>&#9654; Start Recording</button>
+      <div class="checkbox-row" style="margin:0;">
+        <input type="checkbox" id="scheduleEnabled" onchange="toggleSchedule()">
+        <label for="scheduleEnabled" style="font-size:0.85rem;">Schedule start</label>
+      </div>
+      <div id="scheduleTimeWrap" style="display:none;align-items:center;gap:0.4rem;">
+        <input type="time" id="scheduleTime" style="width:120px;margin-bottom:0;">
+        <span style="font-size:0.8rem;color:var(--muted);">24-hr local time</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Preview overlay (recording-time frame grab) -->
+<div id="previewOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.95);
+     z-index:101;align-items:center;justify-content:center;flex-direction:column;gap:0.75rem;">
+  <div style="display:flex;align-items:center;gap:1rem;width:95vw;max-width:1400px;">
+    <span id="previewLabel" style="color:#fff;font-weight:600;flex:1;font-size:0.9rem;"></span>
+    <button class="btn-danger" onclick="closePreview()" style="padding:0.3rem 0.75rem;">&#10005; Close</button>
+  </div>
+  <canvas id="previewCanvas" style="max-width:95vw;max-height:88vh;display:block;border-radius:6px;background:#000;"></canvas>
+  <span style="color:var(--muted);font-size:0.75rem;">Frame grabbed from disk &mdash; updates every 10 s</span>
+</div>
+
+<!-- Video player overlay -->
+<div id="playerOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);
+     z-index:100;align-items:center;justify-content:center;flex-direction:column;gap:0.75rem;">
+  <div style="display:flex;align-items:center;gap:1rem;width:90vw;max-width:960px;">
+    <span id="playerLabel" style="color:#fff;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+    <a id="playerDownload" href="#" style="color:var(--accent);font-size:0.82rem;white-space:nowrap;">&#8595; Download</a>
+    <button class="btn-danger" onclick="closePlayer()" style="padding:0.3rem 0.75rem;">&#10005; Close</button>
+  </div>
+  <video id="playerVideo" controls
+         style="width:90vw;max-width:960px;max-height:75vh;border-radius:8px;background:#000;">
+    Your browser does not support HTML5 video.
+  </video>
+  <span style="color:var(--muted);font-size:0.78rem;">Tip: use the seek bar to scrub. Large files may take a moment to buffer.</span>
+</div>
+
+<!-- Recordings browser -->
+<div class="card" id="recordingsCard" style="margin-top:0.5rem;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+    <h3 style="margin:0;">Recordings</h3>
+    <button onclick="loadRecordings()" class="btn-muted"
+            style="padding:0.3rem 0.75rem;font-size:0.78rem;">&#8634; Refresh</button>
+  </div>
+  <div id="recordingsList"><span class="muted">Loading...</span></div>
+</div>
+
+<!-- Active / completed session -->
+<div id="sessionSection" class="hidden">
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem;">
+      <div>
+        <h3 style="margin:0;">Session <span id="sessionId" class="mono"></span></h3>
+        <span id="sessionStarted" style="font-size:0.8rem;color:var(--muted);"></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:0.75rem;">
+        <span id="sessionBadge" class="badge"></span>
+        <span id="sessionElapsed" class="mono" style="font-size:1.1rem;font-weight:700;"></span>
+        <button id="stopBtn" class="btn-danger" onclick="stopSession()"
+                style="padding:0.4rem 0.9rem;">&#9632; Stop</button>
+        <button id="newBtn" class="hidden btn-muted" onclick="newSession()"
+                style="padding:0.4rem 0.9rem;">&#43; New Session</button>
+      </div>
+    </div>
+    <div id="progressSection" class="hidden">
+      <div class="progress-bar"><div class="progress-bar-fill" id="sessionFill" style="width:0%;"></div></div>
+    </div>
+  </div>
+
+  <div id="streamCards" class="row"></div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let cameras            = [];
+let cameraNames        = {};   // node -> user-defined name (server-persisted)
+let cameraSettings     = {};   // node -> {resolution, fps} (server-persisted)
+let pollTimer          = null;
+let currentSessionName = '';
+let cameraTagMap       = {};   // node -> user-defined name, for active session cards
+const _previewImages   = {};   // nodeShort -> Image — cache for flicker-free canvas redraws
+
+function onEncChange(i) {
+  const isCopy = document.getElementById('camEncoder_' + i)?.value === 'copy';
+  const x264   = document.getElementById('camX264Opts_' + i);
+  const overlays = document.getElementById('camOverlayOpts_' + i);
+  if (x264)    x264.style.display    = isCopy ? 'none' : '';
+  if (overlays) overlays.style.display = isCopy ? 'none' : '';
+}
+
+function onFmtChange(i) {
+  if (!cameras[i]) return;
+  const fmt    = document.getElementById('camFmt_' + i)?.value || 'MJPG';
+  const isH264 = fmt === 'H264';
+  const resSet = new Map();
+  for (const m of cameras[i].modes.filter(function(m) { return m.fmt === fmt; })) {
+    const key = m.width + 'x' + m.height;
+    if (!resSet.has(key)) resSet.set(key, m);
+  }
+  const sel = document.getElementById('camRes_' + i);
+  if (sel) {
+    sel.innerHTML = [...resSet.values()].sort(function(a, b) { return b.width - a.width; }).map(function(m) {
+      return '<option value="' + m.width + 'x' + m.height + '">' + m.width + '\xd7' + m.height + '</option>';
+    }).join('');
+  }
+  const encSel = document.getElementById('camEncoder_' + i);
+  if (encSel) {
+    if (isH264) { encSel.value = 'copy'; encSel.disabled = true; }
+    else { encSel.disabled = false; if (encSel.value === 'copy') encSel.value = 'libx264'; }
+  }
+  onEncChange(i);
+  saveCamSettings(i);
+}
+
+function toggleSchedule() {
+  const wrap = document.getElementById('scheduleTimeWrap');
+  wrap.style.display = document.getElementById('scheduleEnabled').checked ? 'flex' : 'none';
+}
+
+async function loadCameraNames() {
+  try {
+    const r = await fetch('/api/camera-names');
+    if (r.ok) cameraNames = await r.json();
+  } catch (_) {}
+}
+
+async function saveCameraNames() {
+  try {
+    await fetch('/api/camera-names', {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify(cameraNames),
+    });
+  } catch (_) {}
+}
+
+function saveCamName(i) {
+  const val = document.getElementById('camTag_' + i)?.value.trim();
+  if (cameras[i]) {
+    cameraNames[cameras[i].capture_node] = val || deriveShortName(cameras[i].name);
+    saveCameraNames();
+  }
+}
+
+async function loadCameraSettings() {
+  try {
+    const r = await fetch('/api/camera-settings');
+    if (r.ok) cameraSettings = await r.json();
+  } catch (_) {}
+}
+
+async function saveCameraSettings() {
+  try {
+    await fetch('/api/camera-settings', {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify(cameraSettings),
+    });
+  } catch (_) {}
+}
+
+function saveCamSettings(i) {
+  if (!cameras[i]) return;
+  const node = cameras[i].capture_node;
+  const fmt  = document.getElementById('camFmt_' + i)?.value;
+  const res  = document.getElementById('camRes_' + i)?.value;
+  const fps  = Number(document.getElementById('camFps_' + i)?.value || 10);
+  cameraSettings[node] = { format: fmt, resolution: res, fps };
+  saveCameraSettings();
+  updateEstimate();
+}
+
+function deriveShortName(cameraName) {
+  // "HD USB Camera: HD USB Camera" -> "hd_usb"
+  // "Arducam Webcam Vitade AF"     -> "arducam"
+  let s = cameraName.split(':')[0].trim().toLowerCase();
+  s = s.replace(/\bcamera\b/g, '').replace(/\s+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+  return s || 'cam';
+}
+
+// ── Drive panel ───────────────────────────────────────────────────────────────
+let _driveData = { active: null, drives: [] };
+let _drivePoller = null;
+
+async function loadStorage() {
+  try {
+    const r = await fetch('/api/storage');
+    if (!r.ok) return;
+    _driveData = await r.json();
+    renderDrives();
+  } catch (_) {}
+}
+
+function renderDrives() {
+  const sel = document.getElementById('driveSelect');
+  const { active, drives } = _driveData;
+
+  if (!drives.length) {
+    sel.innerHTML = '<option value="">— No drives connected —</option>';
+  } else {
+    sel.innerHTML = drives.map(d =>
+      '<option value="' + d.mount + '">' +
+        d.label + '  (' + fmtBytes(d.free) + ' free of ' + fmtBytes(d.total) + ')' +
+      '</option>'
+    ).join('');
+    if (active) sel.value = active;
+  }
+
+  const activeDrive = drives.find(d => d.mount === active);
+  const spaceRow = document.getElementById('driveSpaceRow');
+  if (activeDrive) {
+    spaceRow.style.display = 'block';
+    const pct = (activeDrive.used / activeDrive.total) * 100;
+    document.getElementById('driveFree').textContent  = fmtBytes(activeDrive.free);
+    document.getElementById('driveTotal').textContent = fmtBytes(activeDrive.total);
+    document.getElementById('drivePct').textContent   = pct.toFixed(1) + '% used';
+    const fill = document.getElementById('driveFill');
+    fill.style.width      = pct + '%';
+    fill.style.background = pct > 90 ? 'var(--danger)' : pct > 75 ? 'var(--warn)' : 'var(--accent2)';
+  } else {
+    spaceRow.style.display = 'none';
+  }
+
+  document.getElementById('ejectBtn').disabled = !active;
+}
+
+async function selectDrive() {
+  const mount = document.getElementById('driveSelect').value;
+  if (!mount) return;
+  try {
+    await fetch('/api/storage', {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify({ mount }),
+    });
+    await loadStorage();
+  } catch (_) {}
+}
+
+async function ejectDrive() {
+  const btn = document.getElementById('ejectBtn');
+  btn.disabled = true;
+  btn.textContent = 'Ejecting\u2026';
+  try {
+    const r = await fetch('/api/storage/eject', { method: 'POST' });
+    if (!r.ok) {
+      const err = await r.json();
+      alert('Eject failed: ' + (err.error || 'unknown error'));
+    }
+  } catch (_) {}
+  btn.textContent = '\u23f9 Eject';
+  await loadStorage();
+}
+
+function _startDrivePolling() {
+  if (_drivePoller) return;
+  _drivePoller = setInterval(loadStorage, 5000);
+}
+function _stopDrivePolling() {
+  if (_drivePoller) { clearInterval(_drivePoller); _drivePoller = null; }
+}
+
+// ── Camera discovery ──────────────────────────────────────────────────────────
+async function loadCameras() {
+  document.getElementById('refreshBtn').disabled = true;
+  document.getElementById('cameraConfig').innerHTML =
+    '<span class="mono">Discovering cameras...</span>';
+  try {
+    await loadCameraNames();
+    await loadCameraSettings();
+    const r = await fetch('/api/cameras');
+    if (!r.ok) throw new Error(await r.text());
+    cameras = await r.json();
+    renderConfig();
+  } catch (e) {
+    document.getElementById('cameraConfig').innerHTML =
+      '<div class="alert alert-error">Discovery failed: ' + e.message + '</div>';
+  } finally {
+    document.getElementById('refreshBtn').disabled = false;
+  }
+}
+
+function renderConfig() {
+  const el = document.getElementById('cameraConfig');
+  if (!cameras.length) {
+    el.innerHTML = '<div class="alert alert-error">No UVC cameras found.</div>';
+    document.getElementById('startBtn').disabled = true;
+    return;
+  }
+
+  el.innerHTML = cameras.map((cam, i) => {
+    const saved    = cameraSettings[cam.capture_node] || {};
+    const savedFmt = saved.format || 'MJPG';
+    const savedRes = saved.resolution || null;
+    const savedFps = saved.fps || 10;
+    const isH264   = savedFmt === 'H264';
+
+    // Format dropdown — all unique formats reported by this camera
+    const fmts = [...new Set(cam.modes.map(m => m.fmt))].sort();
+    const fmtOptions = fmts.map(f =>
+      '<option value="' + f + '"' + (savedFmt === f ? ' selected' : '') + '>' + f + '</option>'
+    ).join('');
+
+    // Resolution dropdown — filtered by saved format
+    const resSet = new Map();
+    for (const m of cam.modes.filter(m => m.fmt === savedFmt)) {
+      const key = m.width + 'x' + m.height;
+      if (!resSet.has(key)) resSet.set(key, m);
+    }
+    const resolutions = [...resSet.values()].sort((a, b) => b.width - a.width);
+    const resOptions = resolutions.map(m => {
+      const key = m.width + 'x' + m.height;
+      return '<option value="' + key + '"' + (savedRes === key ? ' selected' : '') + '>' +
+             m.width + '&times;' + m.height + '</option>';
+    }).join('');
+
+    const fpsOptions = [5, 10, 15, 20, 24, 30].map(f =>
+      '<option value="' + f + '"' + (savedFps === f ? ' selected' : '') + '>' + f + ' fps</option>'
+    ).join('');
+
+    const savedName = cameraNames[cam.capture_node] || deriveShortName(cam.name);
+    return '<div style="border:1px solid var(--border);border-radius:6px;padding:0.9rem;margin-bottom:0.75rem;">' +
+      '<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem;flex-wrap:wrap;">' +
+        '<div class="checkbox-row" style="margin:0;">' +
+          '<input type="checkbox" id="camEnabled_' + i + '" checked onchange="updateEstimate()">' +
+          '<label for="camEnabled_' + i + '" style="font-weight:600;font-size:0.9rem;">' + cam.name + '</label>' +
+        '</div>' +
+        '<span class="badge badge-blue">' + cam.capture_node + '</span>' +
+        (cam.h264_node ? '<span class="badge badge-green">H264 (' + cam.h264_node + ')</span>' : '') +
+      '</div>' +
+      '<div class="row">' +
+        '<div class="col">' +
+          '<label>Format</label>' +
+          '<select id="camFmt_' + i + '" onchange="onFmtChange(' + i + ')">' + fmtOptions + '</select>' +
+          '<label>Resolution</label>' +
+          '<select id="camRes_' + i + '" onchange="saveCamSettings(' + i + ')">' + resOptions + '</select>' +
+        '</div>' +
+        '<div class="col">' +
+          '<label>Frame rate</label>' +
+          '<select id="camFps_' + i + '" onchange="saveCamSettings(' + i + ')">' + fpsOptions + '</select>' +
+          '<label>Camera name <span style="font-size:0.72rem;color:var(--muted);">(filename, saved per device)</span></label>' +
+          '<input type="text" id="camTag_' + i + '" value="' + savedName + '" placeholder="e.g. arducam"' +
+            ' onchange="saveCamName(' + i + ')">' +
+        '</div>' +
+        '<div class="col">' +
+          '<label>Encoder</label>' +
+          '<select id="camEncoder_' + i + '" onchange="onEncChange(' + i + ')"' + (isH264 ? ' disabled' : '') + '>' +
+            '<option value="libx264">libx264 (software)</option>' +
+            (cam.h264_node ? '<option value="copy"' + (isH264 ? ' selected' : '') + '>copy (H264 passthrough)</option>' : '') +
+          '</select>' +
+          '<div id="camX264Opts_' + i + '"' + (isH264 ? ' style="display:none"' : '') + '>' +
+            '<label>Preset</label>' +
+            '<select id="camPreset_' + i + '">' +
+              '<option value="ultrafast" selected>ultrafast</option>' +
+              '<option value="superfast">superfast</option>' +
+              '<option value="veryfast">veryfast</option>' +
+              '<option value="faster">faster</option>' +
+              '<option value="fast">fast</option>' +
+              '<option value="medium">medium</option>' +
+            '</select>' +
+            '<label>CRF <span style="font-size:0.72rem;color:var(--muted);">(18=high · 23=default · 28=smaller)</span></label>' +
+            '<input type="number" id="camCrf_' + i + '" value="23" min="10" max="51" onchange="updateEstimate()">' +
+          '</div>' +
+        '</div>' +
+        '<div class="col" id="camOverlayOpts_' + i + '"' + (isH264 ? ' style="display:none"' : '') + '>' +
+          '<div class="checkbox-row">' +
+            '<input type="checkbox" id="camDenoise_' + i + '" checked>' +
+            '<label for="camDenoise_' + i + '">hqdn3d denoise</label>' +
+          '</div>' +
+          '<div class="checkbox-row">' +
+            '<input type="checkbox" id="camTimestamp_' + i + '" checked>' +
+            '<label for="camTimestamp_' + i + '">Timestamp overlay</label>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  document.getElementById('startBtn').disabled = false;
+  updateEstimate();
+}
+
+// ── Storage estimate ──────────────────────────────────────────────────────────
+// Rough lit-room rates from test data (MB/hr @ 10fps CRF23 libx264 hqdn3d)
+const RATE_TABLE = {
+  '1920x1080': 4800, '1280x1024': 2200, '1280x720': 1900,
+  '1024x768':  1500, '800x600': 1100,   '640x480': 900,
+  '320x240':   200,
+};
+
+function updateEstimate() {
+  const hours = Number(document.getElementById('durationHours').value) + Number(document.getElementById('durationMinutes').value) / 60;
+  let totalMBhr = 0;
+  cameras.forEach((_, i) => {
+    if (!document.getElementById('camEnabled_' + i)?.checked) return;
+    const res = document.getElementById('camRes_' + i)?.value || '1920x1080';
+    totalMBhr += RATE_TABLE[res] || 1000;
+  });
+  const el = document.getElementById('storageEst');
+  if (totalMBhr === 0) { el.textContent = '—'; return; }
+  const perHr = fmtBytes(totalMBhr * 1024 * 1024);
+  if (hours > 0) {
+    const label = hours >= 1 ? hours.toFixed(1) + 'h' : Number(document.getElementById('durationMinutes').value) + 'min';
+    const total = fmtBytes(totalMBhr * hours * 1024 * 1024);
+    el.textContent = perHr + '/hr  =  ' + total + ' for ' + label;
+  } else {
+    el.textContent = perHr + '/hr';
+  }
+}
+
+// ── Start session ─────────────────────────────────────────────────────────────
+async function startSession() {
+  const duration_secs = Number(document.getElementById('durationHours').value) * 3600
+                      + Number(document.getElementById('durationMinutes').value) * 60;
+  const duration    = duration_secs > 0 ? duration_secs : null;
+  const sessionName = (document.getElementById('sessionName')?.value || 'session').trim() || 'session';
+
+  // Persist any camera name edits before starting
+  cameras.forEach((cam, i) => {
+    const val = document.getElementById('camTag_' + i)?.value.trim();
+    if (val) cameraNames[cam.capture_node] = val;
+  });
+  await saveCameraNames();
+  currentSessionName = sessionName;
+  cameraTagMap = {};
+  cameras.forEach((cam, i) => {
+    const tag = document.getElementById('camTag_' + i)?.value.trim() || deriveShortName(cam.name);
+    cameraTagMap[cam.capture_node] = tag;
+  });
+
+  const cameraConfigs = [];
+  cameras.forEach((cam, i) => {
+    if (!document.getElementById('camEnabled_' + i)?.checked) return;
+    const fmt     = document.getElementById('camFmt_' + i)?.value || 'MJPG';
+    const isH264  = fmt === 'H264';
+    const [w, h]  = (document.getElementById('camRes_' + i)?.value || '1920x1080').split('x').map(Number);
+    const encoder = document.getElementById('camEncoder_' + i)?.value || 'libx264';
+    const isCopy  = encoder === 'copy';
+    cameraConfigs.push({
+      camera_name:       cam.name,
+      camera_tag:        (document.getElementById('camTag_' + i)?.value || deriveShortName(cam.name)).trim() || deriveShortName(cam.name),
+      node:              isH264 ? (cam.h264_node || cam.capture_node) : cam.capture_node,
+      input_fmt:         fmt.toLowerCase(),
+      width: w, height: h,
+      fps:               Number(document.getElementById('camFps_' + i)?.value || 10),
+      encoder,
+      preset:            document.getElementById('camPreset_' + i)?.value || 'ultrafast',
+      crf:               Number(document.getElementById('camCrf_' + i)?.value || 23),
+      denoise:           !isCopy && (document.getElementById('camDenoise_' + i)?.checked ?? true),
+      timestamp_overlay: !isCopy && (document.getElementById('camTimestamp_' + i)?.checked ?? true),
+    });
+  });
+
+  if (!cameraConfigs.length) {
+    alert('Select at least one camera.');
+    return;
+  }
+
+  document.getElementById('startBtn').disabled = true;
+  try {
+    const r = await fetch('/api/session', {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify({
+        cameras: cameraConfigs, duration, session_name: sessionName,
+        scheduled_time: document.getElementById('scheduleEnabled').checked
+          ? document.getElementById('scheduleTime').value : null,
+      }),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    showSessionSection();
+    startPolling();
+  } catch (e) {
+    document.getElementById('startBtn').disabled = false;
+    alert('Failed to start: ' + e.message);
+  }
+}
+
+// ── Stop session ──────────────────────────────────────────────────────────────
+async function stopSession() {
+  document.getElementById('stopBtn').disabled = true;
+  try {
+    await fetch('/api/session', {method: 'DELETE'});
+  } catch (_) {}
+}
+
+function newSession() {
+  stopPolling();
+  document.getElementById('sessionSection').classList.add('hidden');
+  document.getElementById('configSection').classList.remove('hidden');
+  document.getElementById('startBtn').disabled = false;
+  loadStorage();
+}
+
+// ── Polling ───────────────────────────────────────────────────────────────────
+function startPolling() { pollTimer = setInterval(pollSession, 2000); pollSession(); }
+function stopPolling()  { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+
+async function pollSession() {
+  try {
+    const r = await fetch('/api/session');
+    if (!r.ok) return;
+    const s = await r.json();
+    if (!s) return;
+    renderSession(s);
+    const allDone = !s.streams || s.streams.every(
+      st => st.status === 'done' || st.status === 'error'
+    );
+    if ((s.status === 'done' || s.status === 'stopped' || s.status === 'error') && allDone) {
+      stopPolling();
+      loadStorage();
+      loadRecordings();
+    }
+  } catch (_) {}
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function showSessionSection() {
+  document.getElementById('configSection').classList.add('hidden');
+  document.getElementById('sessionSection').classList.remove('hidden');
+}
+
+function renderSession(s) {
+  const label = currentSessionName ? currentSessionName + '  ·  ' + s.id : s.id;
+  document.getElementById('sessionId').textContent      = label;
+  document.getElementById('sessionStarted').textContent = 'Started ' + s.started_at;
+
+  const badge = document.getElementById('sessionBadge');
+  const statusColors = {scheduled:'badge-yellow', running:'badge-green', stopping:'badge-yellow',
+                        stopped:'badge-yellow', done:'badge-blue', error:'badge-red'};
+  badge.className = 'badge ' + (statusColors[s.status] || 'badge-blue');
+  badge.textContent = s.status.toUpperCase();
+
+  // Elapsed / countdown display
+  const running = s.streams.find(st => st.status === 'running');
+  const elapsed = running ? running.elapsed : (s.streams[0]?.elapsed || 0);
+  if (s.status === 'scheduled') {
+    const cd = s.countdown || 0;
+    document.getElementById('sessionElapsed').textContent =
+      'Starts in ' + fmtElapsed(cd) + (s.scheduled_for ? '  (' + s.scheduled_for + ')' : '');
+  } else {
+    document.getElementById('sessionElapsed').textContent = fmtElapsed(elapsed);
+  }
+
+  // Progress bar
+  if (s.duration) {
+    document.getElementById('progressSection').classList.remove('hidden');
+    document.getElementById('sessionFill').style.width =
+      Math.min((elapsed / s.duration) * 100, 100) + '%';
+  }
+
+  const done = ['done', 'stopped', 'error'].includes(s.status);
+  document.getElementById('stopBtn').style.display = done ? 'none' : 'inline-flex';
+  document.getElementById('stopBtn').disabled = (s.status === 'stopping');
+  document.getElementById('stopBtn').textContent = s.status === 'scheduled' ? '\u2716 Cancel' : '\u25a0 Stop';
+  document.getElementById('newBtn').classList.toggle('hidden', !done);
+
+  // Camera cards
+  const container = document.getElementById('streamCards');
+  container.innerHTML = s.streams.map(st => {
+    const statusColors2 = {pending:'badge-yellow', running:'badge-green',
+                           stitching:'badge-yellow', done:'badge-blue', error:'badge-red'};
+    const badgeCls   = statusColors2[st.status] || 'badge-blue';
+    const hasWarn    = st.stderr_lines && st.stderr_lines.length > 0;
+    const params     = st.params;
+    const displayName = cameraTagMap[st.node] || st.camera_name;
+    const nodeShort   = st.node.replace('/dev/', '');
+
+    const previewHtml = st.status === 'running'
+      ? '<div style="margin-top:0.75rem;cursor:pointer;" onclick="openPreview(\'' + nodeShort + '\',\'' + displayName + '\')">' +
+          '<canvas id="prev_' + nodeShort + '" ' +
+                  'style="width:100%;display:block;border-radius:4px;background:#111;">' +
+          '</canvas>' +
+          '<div style="font-size:0.72rem;color:var(--muted);text-align:center;margin-top:0.25rem;">Click to enlarge \u2022 updates every 10 s</div>' +
+        '</div>'
+      : '';
+
+    return '<div class="card col" style="min-width:300px;">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">' +
+        '<strong>' + displayName + '</strong>' +
+        '<span class="badge ' + badgeCls + '">' + st.status.toUpperCase() + '</span>' +
+      '</div>' +
+      '<div class="stat-grid" style="grid-template-columns:repeat(2,1fr);">' +
+        statEl('Elapsed',    st.elapsed_fmt) +
+        statEl('File size',  st.file_size) +
+        statEl('Rate/hr',    st.rate_per_hr || '—') +
+        statEl('Node',       st.node) +
+        statEl('Resolution', params.width + '&times;' + params.height) +
+        statEl('FPS',        params.fps) +
+        statEl('CRF',        params.crf) +
+        statEl('Denoise',    params.denoise ? 'on' : 'off') +
+      '</div>' +
+      previewHtml +
+      (st.error ? '<div class="alert alert-error" style="margin-top:0.75rem;">' + st.error + '</div>' : '') +
+      (hasWarn ? '<div class="stderr-log" style="margin-top:0.75rem;">' +
+        st.stderr_lines.map(l => l.replace(/</g,'&lt;')).join('\n') + '</div>' : '') +
+      '<div class="mono" style="font-size:0.72rem;color:var(--muted);margin-top:0.5rem;word-break:break-all;">' +
+        st.output_path + '</div>' +
+    '</div>';
+  }).join('');
+  _refreshPreviews(s.streams);
+}
+
+function statEl(label, value) {
+  return '<div class="stat"><div class="stat-label">' + label + '</div>' +
+         '<div class="stat-value">' + value + '</div></div>';
+}
+
+// ── Live preview (canvas-based, flicker-free) ─────────────────────────────────
+function _drawToCanvas(canvas, img) {
+  canvas.width  = img.naturalWidth  || canvas.width  || 640;
+  canvas.height = img.naturalHeight || canvas.height || 360;
+  canvas.getContext('2d').drawImage(img, 0, 0);
+}
+
+function openPreview(nodeShort, displayName) {
+  const canvas = document.getElementById('previewCanvas');
+  canvas.dataset.node = nodeShort;
+  if (_previewImages[nodeShort]) _drawToCanvas(canvas, _previewImages[nodeShort]);
+  document.getElementById('previewLabel').textContent = displayName + '  \u2014  ' + nodeShort;
+  document.getElementById('previewOverlay').style.display = 'flex';
+}
+
+function closePreview() {
+  document.getElementById('previewOverlay').style.display = 'none';
+}
+
+function _refreshPreviews(streams) {
+  streams.forEach(function(st) {
+    if (st.status !== 'running') return;
+    const nodeShort = st.node.replace('/dev/', '');
+
+    // Redraw cached frame onto the (just-rebuilt) card canvas immediately
+    const canvas = document.getElementById('prev_' + nodeShort);
+    if (canvas && _previewImages[nodeShort]) _drawToCanvas(canvas, _previewImages[nodeShort]);
+
+    // Fetch next frame in background; swap canvas only when fully loaded
+    const next = new Image();
+    next.onload = function() {
+      _previewImages[nodeShort] = next;
+      const c = document.getElementById('prev_' + nodeShort);
+      if (c) _drawToCanvas(c, next);
+      // Update overlay canvas if it is showing this node
+      const overlay = document.getElementById('previewOverlay');
+      const oCanvas = document.getElementById('previewCanvas');
+      if (overlay.style.display === 'flex' && oCanvas.dataset.node === nodeShort) {
+        _drawToCanvas(oCanvas, next);
+      }
+    };
+    next.src = '/api/preview/' + nodeShort + '?t=' + Date.now();
+  });
+}
+
+function fmtElapsed(secs) {
+  const s = Math.floor(secs);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
+  return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(ss).padStart(2,'0');
+}
+
+function fmtBytes(n) {
+  const units = ['B','KB','MB','GB','TB'];
+  let i = 0;
+  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+  return n.toFixed(1) + ' ' + units[i];
+}
+
+// ── Recordings browser ───────────────────────────────────────────────────────
+async function loadRecordings() {
+  const el = document.getElementById('recordingsList');
+  el.innerHTML = '<span class="mono">Loading...</span>';
+  try {
+    const r = await fetch('/api/recordings');
+    if (!r.ok) throw new Error(await r.text());
+    const cameras = await r.json();
+    if (!cameras.length) {
+      el.innerHTML = '<span class="muted">No recordings found.</span>';
+      return;
+    }
+    el.innerHTML = cameras.map(cam => {
+      const rows = cam.files.map(f => {
+        const date = f.mtime.replace('T', ' ');
+        const large = f.size_bytes > 2 * 1024 * 1024 * 1024;
+        return '<tr>' +
+          '<td class="mono">' + f.name.replace('.mp4','') + '</td>' +
+          '<td>' + f.size_fmt + (large ? ' <span class="badge badge-yellow">large</span>' : '') + '</td>' +
+          '<td class="mono" style="color:var(--muted);">' + date + '</td>' +
+          '<td style="white-space:nowrap;">' +
+            '<button onclick="playFile(\'' + f.path + '\',\'' + f.name + '\')" ' +
+              'class="btn-muted" style="padding:0.2rem 0.6rem;font-size:0.75rem;margin-right:0.25rem;">&#9654; Play</button>' +
+            '<a href="/files/' + f.path + '?dl=1" ' +
+              'style="font-size:0.78rem;color:var(--accent);">&#8595; Download</a>' +
+          '</td>' +
+        '</tr>';
+      }).join('');
+      return '<div style="margin-bottom:1.25rem;">' +
+        '<div style="font-weight:600;margin-bottom:0.5rem;">' + cam.display_name + '</div>' +
+        '<div style="overflow-x:auto;">' +
+          '<table><thead><tr>' +
+            '<th>File</th><th>Size</th><th>Date</th><th>Actions</th>' +
+          '</tr></thead><tbody>' + rows + '</tbody></table>' +
+        '</div></div>';
+    }).join('');
+  } catch (e) {
+    el.innerHTML = '<div class="alert alert-error">' + e.message + '</div>';
+  }
+}
+
+function playFile(path, name) {
+  const video    = document.getElementById('playerVideo');
+  const overlay  = document.getElementById('playerOverlay');
+  const label    = document.getElementById('playerLabel');
+  const dlLink   = document.getElementById('playerDownload');
+  video.src      = '/files/' + path;
+  label.textContent  = name;
+  dlLink.href    = '/files/' + path + '?dl=1';
+  overlay.style.display = 'flex';
+  video.load();
+}
+
+function closePlayer() {
+  const video = document.getElementById('playerVideo');
+  video.pause();
+  video.src = '';
+  document.getElementById('playerOverlay').style.display = 'none';
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadStorage();
+_startDrivePolling();
+loadCameras();
+loadRecordings();
+// Restore active session if one is already running (e.g. after page refresh)
+(async () => {
+  try {
+    const r = await fetch('/api/session');
+    if (!r.ok) return;
+    const s = await r.json();
+    if (s && ['scheduled','running','stopping'].includes(s.status)) {
+      showSessionSection();
+      startPolling();
+    }
+  } catch (_) {}
+})();
+document.getElementById('durationHours').addEventListener('input', updateEstimate);
+document.getElementById('durationMinutes').addEventListener('input', updateEstimate);
+</script>
+{% endblock %}

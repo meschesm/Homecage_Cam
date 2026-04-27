@@ -1,0 +1,8 @@
+.DS_Store
+*.jpg
+*.jpeg
+__pycache__/
+*.pyc
+.env
+*.egg-info/
+.venv/
