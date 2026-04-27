@@ -3,11 +3,9 @@
 # Run this on cam2: bash setup.sh
 set -e
 
-APPDIR="/home/ab-ivnc/homecagev3"
-VENV="$APPDIR/venv"
-
-echo "==> Creating app directory"
-mkdir -p "$APPDIR"
+REPODIR="/home/ab-ivnc/homecagev3"
+APPDIR="$REPODIR/webapp"
+VENV="$REPODIR/venv"
 
 echo "==> Creating Python virtualenv"
 python3 -m venv "$VENV"
@@ -23,12 +21,12 @@ HASH=$("$VENV/bin/python3" -c \
   "from passlib.context import CryptContext; print(CryptContext(schemes=['bcrypt']).hash('$PASSWORD'))")
 
 echo "==> Writing .env"
-cat > "$APPDIR/.env" <<EOF
+cat > "$REPODIR/.env" <<EOF
 SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD_HASH=$HASH
 EOF
-chmod 600 "$APPDIR/.env"
+chmod 600 "$REPODIR/.env"
 echo "    .env written."
 
 echo "==> Installing NGINX config"
@@ -45,5 +43,5 @@ sudo systemctl restart homecagev3
 echo "    Service started."
 
 echo ""
-echo "==> Done. App available at http://100.70.127.43"
+echo "==> Done. App available at http://$(hostname -I | awk '{print $1}')"
 echo "    Logs: sudo journalctl -u homecagev3 -f"

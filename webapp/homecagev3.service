@@ -5,7 +5,7 @@ After=network.target
 [Service]
 User=ab-ivnc
 Group=ab-ivnc
-WorkingDirectory=/home/ab-ivnc/homecagev3
+WorkingDirectory=/home/ab-ivnc/homecagev3/webapp
 Environment="PATH=/home/ab-ivnc/homecagev3/venv/bin:/usr/bin:/bin"
 EnvironmentFile=/home/ab-ivnc/homecagev3/.env
 ExecStart=/home/ab-ivnc/homecagev3/venv/bin/uvicorn app.main:app \
