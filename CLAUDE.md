@@ -66,21 +66,19 @@ The main interface is a FastAPI web app deployed on cam2 as a systemd service be
 
 **Deploy files (run from project root):**
 ```bash
-# Deploy to both cam1 and cam2:
+# Deploy to both cam1 and cam2 (run from project root):
 for CAM in cam1 cam2; do
-  scp webapp/app/main.py $CAM:~/homecagev3/app/main.py
-  scp webapp/app/session.py $CAM:~/homecagev3/app/session.py
-  scp webapp/app/recording.py $CAM:~/homecagev3/app/recording.py
-  scp webapp/app/storage.py $CAM:~/homecagev3/app/storage.py
-  scp webapp/app/utils.py $CAM:~/homecagev3/app/utils.py
-  scp webapp/app/templates/session.html $CAM:~/homecagev3/app/templates/session.html
-  scp webapp/app/templates/camera_test.html $CAM:~/homecagev3/app/templates/camera_test.html
-  scp webapp/app/templates/base.html $CAM:~/homecagev3/app/templates/base.html
+  scp webapp/app/main.py $CAM:~/homecagev3/webapp/app/main.py
+  scp webapp/app/session.py $CAM:~/homecagev3/webapp/app/session.py
+  scp webapp/app/recording.py $CAM:~/homecagev3/webapp/app/recording.py
+  scp webapp/app/storage.py $CAM:~/homecagev3/webapp/app/storage.py
+  scp webapp/app/utils.py $CAM:~/homecagev3/webapp/app/utils.py
+  scp webapp/app/templates/session.html $CAM:~/homecagev3/webapp/app/templates/session.html
+  scp webapp/app/templates/camera_test.html $CAM:~/homecagev3/webapp/app/templates/camera_test.html
+  scp webapp/app/templates/base.html $CAM:~/homecagev3/webapp/app/templates/base.html
   ssh $CAM 'sudo systemctl restart homecagev3'
 done
 ```
-
-**Note:** cam2 app files live at `~/homecagev3/app/`; cam1 at `~/homecagev3/webapp/app/` (repo layout). See deploy paths above.
 
 **Access:**
 - cam1: `http://100.81.80.110/` (requires Tailscale)
