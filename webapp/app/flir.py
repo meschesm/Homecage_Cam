@@ -113,12 +113,13 @@ class FlirCapture:
 
     def __init__(self, serial: str, width: int, height: int, fps: float):
         self._serial = serial
-        self._width  = width
-        self._height = height
         self._fps    = fps
         self._q: queue.Queue[bytes | None] = queue.Queue(maxsize=8)
         self._stop   = threading.Event()
+        self._ready  = threading.Event()
         self._thread: threading.Thread | None = None
+        self.actual_width  = width
+        self.actual_height = height
 
     def start(self) -> None:
         self._thread = threading.Thread(
@@ -132,6 +133,9 @@ class FlirCapture:
         if self._thread:
             self._thread.join(timeout=5)
 
+    def wait_ready(self, timeout: float = 5.0) -> bool:
+        return self._ready.wait(timeout)
+
     def get(self, timeout: float = 2.0) -> bytes | None:
         try:
             return self._q.get(timeout=timeout)
@@ -142,10 +146,20 @@ class FlirCapture:
         cam = stream = None
         try:
             arv_id = _arv_id_map.get(f"flir_{self._serial}")
-            cam = _Aravis.Camera.new(arv_id)   # None = first camera if map miss
-            cam.set_region(0, 0, self._width, self._height)
+            cam = _Aravis.Camera.new(arv_id)
+            # Reset binning to 1x1 for full resolution
+            try:
+                cam.set_binning(1, 1)
+            except Exception:
+                pass
             cam.set_frame_rate(self._fps)
             cam.set_pixel_format(_Aravis.PIXEL_FORMAT_MONO_8)
+            # Query actual frame size (camera may have its own defaults)
+            x, y, w, h = cam.get_region()
+            self.actual_width  = w
+            self.actual_height = h
+            log.info("FLIR actual resolution: %dx%d", w, h)
+            self._ready.set()
             stream  = cam.create_stream(None, None)
             payload = cam.get_payload()
             for _ in range(8):
@@ -277,11 +291,22 @@ async def flir_stream_frames(node: str) -> AsyncGenerator[bytes, None]:
         raise RuntimeError(f"{node} is already streaming")
 
     capture = FlirCapture(serial_from_node(node), FLIR_WIDTH, FLIR_HEIGHT, 10.0)
+    capture.start()
+
+    # Wait for camera to connect and report its actual resolution
+    loop = asyncio.get_event_loop()
+    ready = await loop.run_in_executor(None, capture.wait_ready, 5.0)
+    if not ready:
+        capture.stop()
+        raise RuntimeError("FLIR camera did not initialize within 5 seconds")
+
+    w, h = capture.actual_width, capture.actual_height
+    log.info("FLIR stream using %dx%d", w, h)
 
     cmd = [
         "ffmpeg", "-loglevel", "error",
         "-f", "rawvideo", "-pix_fmt", "gray",
-        "-s", f"{FLIR_WIDTH}x{FLIR_HEIGHT}", "-r", "10",
+        "-s", f"{w}x{h}", "-r", "10",
         "-i", "pipe:0",
         "-vf", f"scale=640:480,{_STREAM_DRAWTEXT}",
         "-f", "mjpeg", "-q:v", "5",
@@ -295,11 +320,9 @@ async def flir_stream_frames(node: str) -> AsyncGenerator[bytes, None]:
         stderr=asyncio.subprocess.DEVNULL,
     )
     _active[node] = proc
-    capture.start()
     log.info("FLIR stream started: %s (pid=%d)", node, proc.pid)
 
-    loop        = asyncio.get_event_loop()
-    stop_feed   = asyncio.Event()
+    stop_feed = asyncio.Event()
 
     async def _feeder():
         try:
