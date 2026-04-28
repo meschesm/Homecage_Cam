@@ -44,13 +44,22 @@ FLIR_MODES: list[FormatMode] = [
 
 # ── Node helpers ───────────────────────────────────────────────────────────────
 
+# Maps node string → aravis device ID (populated during discovery)
+_arv_id_map: dict[str, str] = {}
+
+
 def is_flir(node: str) -> bool:
     return node.startswith("flir_")
 
 
 def serial_from_node(node: str) -> str:
-    """Extract the serial/device-id from a 'flir_{serial}' node string."""
+    """Extract the serial from a 'flir_{serial}' node string."""
     return node[5:]
+
+
+def _arv_id_for_node(node: str) -> str:
+    """Return the aravis device ID for a node, falling back to None (first camera)."""
+    return _arv_id_map.get(node)
 
 
 # ── Discovery ──────────────────────────────────────────────────────────────────
@@ -76,8 +85,10 @@ def discover_flir_cameras() -> list[CameraInfo]:
             try:
                 serial = cam.get_string_feature_value("DeviceSerialNumber")
             except Exception:
-                serial = str(i)
+                serial = arv_id.replace(" ", "_")
             del cam
+            node = f"flir_{serial}"
+            _arv_id_map[node] = arv_id   # save so FlirCapture can connect correctly
             cameras.append(CameraInfo(
                 name=f"{vendor} {model}",
                 capture_node=f"flir_{serial}",
@@ -130,7 +141,8 @@ class FlirCapture:
     def _run(self) -> None:
         cam = stream = None
         try:
-            cam = _Aravis.Camera.new(self._serial)
+            arv_id = _arv_id_map.get(f"flir_{self._serial}")
+            cam = _Aravis.Camera.new(arv_id)   # None = first camera if map miss
             cam.set_region(0, 0, self._width, self._height)
             cam.set_frame_rate(self._fps)
             cam.set_pixel_format(_Aravis.PIXEL_FORMAT_MONO_8)
@@ -264,8 +276,7 @@ async def flir_stream_frames(node: str) -> AsyncGenerator[bytes, None]:
     if node in _active and (_active[node].returncode is None):
         raise RuntimeError(f"{node} is already streaming")
 
-    serial  = serial_from_node(node)
-    capture = FlirCapture(serial, FLIR_WIDTH, FLIR_HEIGHT, 10.0)
+    capture = FlirCapture(serial_from_node(node), FLIR_WIDTH, FLIR_HEIGHT, 10.0)
 
     cmd = [
         "ffmpeg", "-loglevel", "error",
