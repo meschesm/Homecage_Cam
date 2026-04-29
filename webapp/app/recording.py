@@ -218,6 +218,10 @@ def _build_cmd(params: dict, progress_path: str, output_path: str) -> list[str]:
 
     if not is_copy:
         filters = [f"fps={params['fps']}"]
+        if params.get("hflip"):
+            filters.append("hflip")
+        if params.get("vflip"):
+            filters.append("vflip")
         if params.get("denoise"):
             filters.append("hqdn3d=2:2:3:3")
         if params.get("timestamp_overlay"):
@@ -273,6 +277,10 @@ def _build_flir_cmd(params: dict, progress_path: str, output_path: str) -> list[
         "-i", "pipe:0",
     ]
     filters = ["format=yuv420p", f"fps={fps}"]
+    if params.get("hflip"):
+        filters.append("hflip")
+    if params.get("vflip"):
+        filters.append("vflip")
     if params.get("denoise"):
         filters.append("hqdn3d=2:2:3:3")
     if params.get("timestamp_overlay"):

@@ -165,6 +165,10 @@ def _build_cmd(params: dict, segment_pattern: str, segment_list_path: str) -> li
 
     if not is_copy:
         rec_filters = [f"fps={params['fps']}"]
+        if params.get("hflip"):
+            rec_filters.append("hflip")
+        if params.get("vflip"):
+            rec_filters.append("vflip")
         if params.get("denoise"):
             rec_filters.append("hqdn3d=2:2:3:3")
         if params.get("timestamp_overlay"):
@@ -443,6 +447,8 @@ async def start_session(
             "crf":               int(cfg.get("crf", 23)),
             "denoise":           bool(cfg.get("denoise", True)),
             "timestamp_overlay": bool(cfg.get("timestamp_overlay", True)),
+            "hflip":             bool(cfg.get("hflip", False)),
+            "vflip":             bool(cfg.get("vflip", False)),
             "duration":          duration,
         }
         streams.append(StreamStatus(

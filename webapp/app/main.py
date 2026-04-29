@@ -133,7 +133,7 @@ async def api_camera_settings_post(request: Request, _: str = Depends(require_au
 
 
 @app.get("/stream/{node_name}")
-async def stream(node_name: str, _: str = Depends(require_auth_api)):
+async def stream(node_name: str, hflip: bool = False, vflip: bool = False, _: str = Depends(require_auth_api)):
     """Live MJPEG stream for a camera node (e.g. video0, flir_18474893)."""
     if node_name.startswith("flir_"):
         node = node_name
@@ -143,7 +143,7 @@ async def stream(node_name: str, _: str = Depends(require_auth_api)):
         return JSONResponse({"error": "Invalid node"}, status_code=400)
     try:
         return StreamingResponse(
-            stream_frames(node),
+            stream_frames(node, hflip=hflip, vflip=vflip),
             media_type="multipart/x-mixed-replace; boundary=frame",
         )
     except RuntimeError as e:

@@ -45,14 +45,14 @@ async def stop_stream(node: str):
     log.info("Stream stopped: %s", node)
 
 
-async def stream_frames(node: str, input_fmt: str = "mjpeg") -> AsyncGenerator[bytes, None]:  # noqa: C901
+async def stream_frames(node: str, input_fmt: str = "mjpeg", hflip: bool = False, vflip: bool = False) -> AsyncGenerator[bytes, None]:  # noqa: C901
     """
     Async generator — yields raw multipart chunks suitable for StreamingResponse.
     Handles both UVC (V4L2) and FLIR (aravis) nodes.
     """
     from .flir import is_flir, flir_stream_frames
     if is_flir(node):
-        async for chunk in flir_stream_frames(node):
+        async for chunk in flir_stream_frames(node, hflip=hflip, vflip=vflip):
             yield chunk
         return
 
@@ -74,7 +74,11 @@ async def stream_frames(node: str, input_fmt: str = "mjpeg") -> AsyncGenerator[b
         "-video_size",    _STREAM_RES,
         "-framerate",     str(_STREAM_FPS),
         "-i",             node,
-        "-vf",            _DRAWTEXT,
+        "-vf",            ",".join(filter(None, [
+                              "hflip" if hflip else None,
+                              "vflip" if vflip else None,
+                              _DRAWTEXT,
+                          ])),
         "-f",             "mjpeg",
         "-q:v",           str(_STREAM_Q),
         "pipe:1",

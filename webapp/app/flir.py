@@ -243,6 +243,10 @@ def build_flir_cmd(
     ]
 
     rec_filters = ["format=yuv420p", f"fps={fps}"]
+    if params.get("hflip"):
+        rec_filters.append("hflip")
+    if params.get("vflip"):
+        rec_filters.append("vflip")
     if params.get("denoise"):
         rec_filters.append("hqdn3d=2:2:3:3")
     if params.get("timestamp_overlay"):
@@ -293,7 +297,7 @@ _STREAM_DRAWTEXT = (
 BOUNDARY = b"--frame"
 
 
-async def flir_stream_frames(node: str) -> AsyncGenerator[bytes, None]:
+async def flir_stream_frames(node: str, hflip: bool = False, vflip: bool = False) -> AsyncGenerator[bytes, None]:
     """
     Async generator of MJPEG multipart chunks for live preview.
     Captures at full resolution, scales to 640×480 for streaming.
@@ -322,7 +326,13 @@ async def flir_stream_frames(node: str) -> AsyncGenerator[bytes, None]:
         "-color_range", "2",
         "-s", f"{w}x{h}", "-r", "10",
         "-i", "pipe:0",
-        "-vf", f"format=yuv420p,scale=640:480,{_STREAM_DRAWTEXT}",
+        "-vf", ",".join(filter(None, [
+            "format=yuv420p",
+            "hflip" if hflip else None,
+            "vflip" if vflip else None,
+            "scale=640:480",
+            _STREAM_DRAWTEXT,
+        ])),
         "-f", "mjpeg", "-q:v", "5",
         "pipe:1",
     ]

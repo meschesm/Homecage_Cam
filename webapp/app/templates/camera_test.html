@@ -67,6 +67,15 @@
           <label for="denoiseCheck">hqdn3d=2:2:3:3 denoise (recommended for IR)</label>
         </div>
       </div>
+
+      <div class="checkbox-row">
+        <input type="checkbox" id="hflipCheck">
+        <label for="hflipCheck">Flip horizontal</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="vflipCheck">
+        <label for="vflipCheck">Flip vertical</label>
+      </div>
     </div>
     <div class="col">
       <label>Duration</label>
@@ -309,7 +318,9 @@ function startPreview(captureNode, cameraName) {
   document.getElementById('previewLabel').textContent = cameraName;
   const img = document.getElementById('previewImg');
   img.style.opacity = '1';
-  img.src = `/stream/${nodeName}`;
+  const hf = document.getElementById('hflipCheck') && document.getElementById('hflipCheck').checked ? '&hflip=true' : '';
+  const vf = document.getElementById('vflipCheck') && document.getElementById('vflipCheck').checked ? '&vflip=true' : '';
+  img.src = '/stream/' + nodeName + '?' + hf + vf;
   overlay.style.display = 'flex';
 }
 
@@ -345,6 +356,8 @@ async function startRecording() {
     crf:        Number(document.getElementById('crfInput').value),
     denoise:            document.getElementById('denoiseCheck').checked,
     timestamp_overlay:  !isPassthrough,
+    hflip:              document.getElementById('hflipCheck').checked,
+    vflip:              document.getElementById('vflipCheck').checked,
   };
 
   document.getElementById('recordBtn').disabled = true;
@@ -584,6 +597,8 @@ async function runAllTests(cameraIdx) {
   const preset   = document.getElementById('presetSelect').value;
   const crf      = Number(document.getElementById('crfInput').value);
   const denoise  = document.getElementById('denoiseCheck').checked;
+  const hflip    = document.getElementById('hflipCheck').checked;
+  const vflip    = document.getElementById('vflipCheck').checked;
 
   document.getElementById('batchCameraName').textContent = getDisplayName(cam);
   document.getElementById('batchBody').innerHTML = '';
@@ -634,7 +649,7 @@ async function runAllTests(cameraIdx) {
         body:    JSON.stringify({
           camera_name: getDisplayName(cam), node, input_fmt,
           width: combo.width, height: combo.height,
-          fps: combo.fps, duration, encoder, preset, crf, denoise, timestamp_overlay: true,
+          fps: combo.fps, duration, encoder, preset, crf, denoise, hflip, vflip, timestamp_overlay: true,
         }),
       });
       if (!r.ok) throw new Error(await r.text());

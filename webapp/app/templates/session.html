@@ -230,10 +230,12 @@ async function saveCameraSettings() {
 function saveCamSettings(i) {
   if (!cameras[i]) return;
   const node = cameras[i].capture_node;
-  const fmt  = document.getElementById('camFmt_' + i)?.value;
-  const res  = document.getElementById('camRes_' + i)?.value;
-  const fps  = Number(document.getElementById('camFps_' + i)?.value || 10);
-  cameraSettings[node] = { format: fmt, resolution: res, fps };
+  const fmt   = document.getElementById('camFmt_' + i)?.value;
+  const res   = document.getElementById('camRes_' + i)?.value;
+  const fps   = Number(document.getElementById('camFps_' + i)?.value || 10);
+  const hflip = document.getElementById('camHflip_' + i)?.checked ?? false;
+  const vflip = document.getElementById('camVflip_' + i)?.checked ?? false;
+  cameraSettings[node] = { format: fmt, resolution: res, fps, hflip, vflip };
   saveCameraSettings();
   updateEstimate();
 }
@@ -357,10 +359,12 @@ function renderConfig() {
   }
 
   el.innerHTML = cameras.map((cam, i) => {
-    const saved    = cameraSettings[cam.capture_node] || {};
-    const savedFmt = saved.format || 'MJPG';
-    const savedRes = saved.resolution || null;
-    const savedFps = saved.fps || 10;
+    const saved     = cameraSettings[cam.capture_node] || {};
+    const savedFmt  = saved.format || 'MJPG';
+    const savedRes  = saved.resolution || null;
+    const savedFps  = saved.fps || 10;
+    const savedHflip = saved.hflip || false;
+    const savedVflip = saved.vflip || false;
     const isH264   = savedFmt === 'H264';
 
     // Format dropdown — all unique formats reported by this camera
@@ -439,6 +443,14 @@ function renderConfig() {
             '<input type="checkbox" id="camTimestamp_' + i + '" checked>' +
             '<label for="camTimestamp_' + i + '">Timestamp overlay</label>' +
           '</div>' +
+          '<div class="checkbox-row">' +
+            '<input type="checkbox" id="camHflip_' + i + '"' + (savedHflip ? ' checked' : '') + ' onchange="saveCamSettings(' + i + ')">' +
+            '<label for="camHflip_' + i + '">Flip horizontal</label>' +
+          '</div>' +
+          '<div class="checkbox-row">' +
+            '<input type="checkbox" id="camVflip_' + i + '"' + (savedVflip ? ' checked' : '') + ' onchange="saveCamSettings(' + i + ')">' +
+            '<label for="camVflip_' + i + '">Flip vertical</label>' +
+          '</div>' +
         '</div>' +
       '</div>' +
     '</div>';
@@ -516,6 +528,8 @@ async function startSession() {
       crf:               Number(document.getElementById('camCrf_' + i)?.value || 23),
       denoise:           !isCopy && (document.getElementById('camDenoise_' + i)?.checked ?? true),
       timestamp_overlay: !isCopy && (document.getElementById('camTimestamp_' + i)?.checked ?? true),
+      hflip:             document.getElementById('camHflip_' + i)?.checked ?? false,
+      vflip:             document.getElementById('camVflip_' + i)?.checked ?? false,
     });
   });
 
