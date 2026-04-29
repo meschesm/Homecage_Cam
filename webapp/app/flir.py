@@ -147,22 +147,30 @@ class FlirCapture:
         try:
             arv_id = _arv_id_map.get(f"flir_{self._serial}")
             cam = _Aravis.Camera.new(arv_id)
-            # Reset binning to 1x1 for full resolution
+            # Reset binning to 1x1, then expand ROI to full sensor
             try:
                 cam.set_binning(1, 1)
             except Exception:
                 pass
+            dev = cam.get_device()
+            sensor_w = dev.get_integer_feature_value("SensorWidth")
+            sensor_h = dev.get_integer_feature_value("SensorHeight")
+            try:
+                dev.set_integer_feature_value("OffsetX", 0)
+                dev.set_integer_feature_value("OffsetY", 0)
+                dev.set_integer_feature_value("Width",  sensor_w)
+                dev.set_integer_feature_value("Height", sensor_h)
+            except Exception as e:
+                log.warning("FLIR could not set full region: %s", e)
             cam.set_frame_rate(self._fps)
             cam.set_pixel_format(_Aravis.PIXEL_FORMAT_MONO_8)
             # Enable auto-exposure and auto-gain so the camera adapts to scene brightness
-            dev = cam.get_device()
             dev.set_string_feature_value("ExposureAuto", "Continuous")
             dev.set_string_feature_value("GainAuto", "Continuous")
-            # Query actual frame size (camera may have its own defaults)
             x, y, w, h = cam.get_region()
             self.actual_width  = w
             self.actual_height = h
-            log.info("FLIR actual resolution: %dx%d", w, h)
+            log.info("FLIR region: x=%d y=%d w=%d h=%d", x, y, w, h)
             self._ready.set()
             stream  = cam.create_stream(None, None)
             payload = cam.get_payload()
