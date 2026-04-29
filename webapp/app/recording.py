@@ -21,6 +21,7 @@ from typing import Any
 import psutil
 
 from .config import settings
+from .flir import FLIR_HEIGHT, FLIR_WIDTH, FlirCapture, is_flir, serial_from_node
 from .storage import storage_manager
 from .utils import FMT_MAP, fmt_bytes
 
@@ -255,16 +256,64 @@ def _build_cmd(params: dict, progress_path: str, output_path: str) -> list[str]:
     return cmd
 
 
+# ── ffmpeg command builder for FLIR (rawvideo pipe:0) ─────────────────────────
+
+def _build_flir_cmd(params: dict, progress_path: str, output_path: str) -> list[str]:
+    w   = int(params.get("width",  FLIR_WIDTH))
+    h   = int(params.get("height", FLIR_HEIGHT))
+    fps = int(params.get("fps", 10))
+    cmd = [
+        "ffmpeg", "-y", "-loglevel", "warning",
+        "-f", "rawvideo",
+        "-pix_fmt", "gray",
+        "-s", f"{w}x{h}",
+        "-r", str(fps),
+        "-thread_queue_size", "512",
+        "-i", "pipe:0",
+    ]
+    filters = [f"fps={fps}"]
+    if params.get("denoise"):
+        filters.append("hqdn3d=2:2:3:3")
+    if params.get("timestamp_overlay"):
+        filters.append(
+            r"drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+            r":text='%{localtime\:%D %T}'"
+            r":x=w-tw-10:y=h-th-10:fontsize=36"
+            r":fontcolor=white@0.9:box=1:boxcolor=black@0.4:boxborderw=4"
+        )
+    enc_label  = f"libx264 CRF{params.get('crf', 23)}"
+    title_text = (f"{w}x{h}  MONO8  {enc_label}  {fps}fps")
+    filters.append(
+        f"drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+        f":text='{title_text}'"
+        f":x=(w-tw)/2:y=(h-th)/2"
+        f":fontsize=52:fontcolor=white@0.95:box=1:boxcolor=black@0.7:boxborderw=14"
+        f":enable='lt(t,5)'"
+    )
+    cmd += ["-vf", ",".join(filters)]
+    cmd += [
+        "-c:v", "libx264",
+        "-preset", params.get("preset", "ultrafast"),
+        "-crf",    str(params.get("crf", 23)),
+        "-t",        str(params["duration"]),
+        "-progress", progress_path,
+        output_path,
+    ]
+    return cmd
+
+
 # ── Async recording task ───────────────────────────────────────────────────────
 
 async def run_job(job: RecordJob):
     test_dir = storage_manager.test_recordings_dir
     test_dir.mkdir(parents=True, exist_ok=True)
 
+    _is_flir = is_flir(job.params.get("node", ""))
+
     # Descriptive filename: Camera_WxH_FMT_encoder_jobid.mp4
     safe      = re.sub(r"[^\w]", "_", job.camera_name.split(":")[0].strip())
     w, h      = job.params.get("width", 0), job.params.get("height", 0)
-    fmt       = re.sub(r"[^\w]", "", job.params.get("input_fmt", "").upper())
+    fmt       = "MONO8" if _is_flir else re.sub(r"[^\w]", "", job.params.get("input_fmt", "").upper())
     enc       = job.params.get("encoder", "libx264")
     enc_tag   = "copy" if enc == "copy" else f"libx264_crf{job.params.get('crf', 23)}"
     output_path = test_dir / f"{safe}_{w}x{h}_{fmt}_{enc_tag}_{job.id}.mp4"
@@ -276,7 +325,27 @@ async def run_job(job: RecordJob):
     pf.close()
     progress_path = pf.name
 
-    cmd = _build_cmd(job.params, progress_path, str(output_path))
+    flir_capture: FlirCapture | None = None
+    if _is_flir:
+        serial = serial_from_node(job.params["node"])
+        flir_capture = FlirCapture(serial, w or FLIR_WIDTH, h or FLIR_HEIGHT,
+                                   float(job.params.get("fps", 10)))
+        flir_capture.start()
+        loop = asyncio.get_event_loop()
+        ready = await loop.run_in_executor(None, flir_capture.wait_ready, 8.0)
+        if not ready:
+            flir_capture.stop()
+            job.status = JobStatus.ERROR
+            job.error  = "FLIR camera did not initialise within 8 seconds"
+            return
+        # Update params with camera-reported actual resolution
+        job.params["width"]  = flir_capture.actual_width
+        job.params["height"] = flir_capture.actual_height
+        w, h = flir_capture.actual_width, flir_capture.actual_height
+        cmd = _build_flir_cmd(job.params, progress_path, str(output_path))
+    else:
+        cmd = _build_cmd(job.params, progress_path, str(output_path))
+
     job.status = JobStatus.RUNNING
     t_start = time.monotonic()
     frame_errors = 0
@@ -284,11 +353,19 @@ async def run_job(job: RecordJob):
     monitor = _CpuMonitor()
 
     try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        if _is_flir:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        else:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
+            )
         monitor.start([proc.pid])
 
         async def _read_stderr():
@@ -305,7 +382,31 @@ async def run_job(job: RecordJob):
                 job.elapsed = time.monotonic() - t_start
                 await asyncio.sleep(0.5)
 
-        await asyncio.gather(_read_stderr(), _tick())
+        async def _feed_stdin():
+            assert flir_capture is not None
+            loop2 = asyncio.get_event_loop()
+            try:
+                while proc.returncode is None:
+                    frame = await loop2.run_in_executor(None, flir_capture.get, 2.0)
+                    if frame is None:
+                        break
+                    if proc.stdin.is_closing():
+                        break
+                    proc.stdin.write(frame)
+                    await proc.stdin.drain()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            finally:
+                try:
+                    proc.stdin.close()
+                    await proc.stdin.wait_closed()
+                except Exception:
+                    pass
+
+        if _is_flir:
+            await asyncio.gather(_read_stderr(), _tick(), _feed_stdin())
+        else:
+            await asyncio.gather(_read_stderr(), _tick())
         await proc.wait()
         monitor.stop()
 
@@ -354,7 +455,7 @@ async def run_job(job: RecordJob):
                 "file":           output_path.name,
                 "width":          w,
                 "height":         h,
-                "input_fmt":      job.params.get("input_fmt", ""),
+                "input_fmt":      "MONO8" if _is_flir else job.params.get("input_fmt", ""),
                 "encoder":        enc,
                 "crf":            job.params.get("crf"),
                 "fps":            job.params.get("fps"),
@@ -380,10 +481,14 @@ async def run_job(job: RecordJob):
         monitor.stop()
         if proc and proc.returncode is None:
             proc.kill()
+        if flir_capture:
+            flir_capture.stop()
         job.status = JobStatus.ERROR
         job.error = str(exc)
 
     finally:
+        if flir_capture:
+            flir_capture.stop()
         job.elapsed = time.monotonic() - t_start
         try:
             os.unlink(progress_path)

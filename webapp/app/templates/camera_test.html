@@ -328,11 +328,6 @@ async function stopPreview() {
 // ── Recording ────────────────────────────────────────────────────────────────
 async function startRecording() {
   if (!selectedCamera) return;
-  if (selectedCamera.capture_node.startsWith('flir_')) {
-    alert('Test recording is not supported for FLIR cameras. Use the Recording page for overnight sessions.');
-    return;
-  }
-
   const [w, h] = document.getElementById('resSelect').value.split('x').map(Number);
   const encoder = document.getElementById('encoderSelect').value;
   const isPassthrough = encoder === 'copy';
@@ -571,10 +566,6 @@ async function runAllTests(cameraIdx) {
   if (batchRunning) return;
   selectCamera(cameraIdx);
   const cam = cameras[cameraIdx];
-  if (cam.capture_node.startsWith('flir_')) {
-    alert('All-Format Test is not supported for FLIR cameras. Use the Recording page for overnight sessions.');
-    return;
-  }
   const combos = _buildBatchCombos(cam);
 
   // Read encoder settings from config panel
