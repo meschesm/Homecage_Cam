@@ -223,6 +223,7 @@ def build_flir_cmd(
         "ffmpeg", "-y", "-loglevel", "warning",
         "-f", "rawvideo",
         "-pix_fmt", "gray",
+        "-color_range", "2",
         "-s", f"{w}x{h}",
         "-r", str(fps),
         "-thread_queue_size", "512",
@@ -306,6 +307,7 @@ async def flir_stream_frames(node: str) -> AsyncGenerator[bytes, None]:
     cmd = [
         "ffmpeg", "-loglevel", "error",
         "-f", "rawvideo", "-pix_fmt", "gray",
+        "-color_range", "2",
         "-s", f"{w}x{h}", "-r", "10",
         "-i", "pipe:0",
         "-vf", f"scale=640:480,{_STREAM_DRAWTEXT}",

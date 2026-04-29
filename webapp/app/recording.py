@@ -266,6 +266,7 @@ def _build_flir_cmd(params: dict, progress_path: str, output_path: str) -> list[
         "ffmpeg", "-y", "-loglevel", "warning",
         "-f", "rawvideo",
         "-pix_fmt", "gray",
+        "-color_range", "2",
         "-s", f"{w}x{h}",
         "-r", str(fps),
         "-thread_queue_size", "512",
