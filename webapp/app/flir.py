@@ -154,6 +154,10 @@ class FlirCapture:
                 pass
             cam.set_frame_rate(self._fps)
             cam.set_pixel_format(_Aravis.PIXEL_FORMAT_MONO_8)
+            # Enable auto-exposure and auto-gain so the camera adapts to scene brightness
+            dev = cam.get_device()
+            dev.set_string_feature_value("ExposureAuto", "Continuous")
+            dev.set_string_feature_value("GainAuto", "Continuous")
             # Query actual frame size (camera may have its own defaults)
             x, y, w, h = cam.get_region()
             self.actual_width  = w
