@@ -164,7 +164,10 @@ class FlirCapture:
                 log.warning("FLIR could not set full region: %s", e)
             cam.set_frame_rate(self._fps)
             cam.set_pixel_format(_Aravis.PIXEL_FORMAT_MONO_8)
-            # Enable auto-exposure and auto-gain so the camera adapts to scene brightness
+            # Enable auto-exposure and auto-gain so the camera adapts to scene brightness.
+            # Raise the upper exposure limit to near the frame period so dim scenes get enough light.
+            frame_period_us = 1_000_000 / self._fps
+            dev.set_float_feature_value("AutoExposureExposureTimeUpperLimit", frame_period_us * 0.9)
             dev.set_string_feature_value("ExposureAuto", "Continuous")
             dev.set_string_feature_value("GainAuto", "Continuous")
             x, y, w, h = cam.get_region()
