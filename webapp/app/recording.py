@@ -272,7 +272,7 @@ def _build_flir_cmd(params: dict, progress_path: str, output_path: str) -> list[
         "-thread_queue_size", "512",
         "-i", "pipe:0",
     ]
-    filters = [f"fps={fps}"]
+    filters = ["format=yuv420p", f"fps={fps}"]
     if params.get("denoise"):
         filters.append("hqdn3d=2:2:3:3")
     if params.get("timestamp_overlay"):

@@ -234,7 +234,7 @@ def build_flir_cmd(
         "-i", "pipe:0",
     ]
 
-    rec_filters = [f"fps={fps}"]
+    rec_filters = ["format=yuv420p", f"fps={fps}"]
     if params.get("denoise"):
         rec_filters.append("hqdn3d=2:2:3:3")
     if params.get("timestamp_overlay"):
@@ -314,7 +314,7 @@ async def flir_stream_frames(node: str) -> AsyncGenerator[bytes, None]:
         "-color_range", "2",
         "-s", f"{w}x{h}", "-r", "10",
         "-i", "pipe:0",
-        "-vf", f"scale=640:480,{_STREAM_DRAWTEXT}",
+        "-vf", f"format=yuv420p,scale=640:480,{_STREAM_DRAWTEXT}",
         "-f", "mjpeg", "-q:v", "5",
         "pipe:1",
     ]
