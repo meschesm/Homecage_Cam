@@ -545,19 +545,30 @@ function _cancelSchedule(idx) {
 }
 
 function _buildBatchCombos(cam) {
-  // One entry per unique (fmt, width, height), fps = highest available ≤ 10
-  const seen   = new Set();
   const combos = [];
-  for (const mode of cam.modes) {
-    const key = `${mode.fmt}|${mode.width}|${mode.height}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const fpsList = cam.modes
-      .filter(m => m.fmt === mode.fmt && m.width === mode.width && m.height === mode.height)
-      .map(m => m.fps);
-    const under = fpsList.filter(f => f <= 10);
-    const fps   = under.length ? Math.max(...under) : 10;
-    combos.push({ fmt: mode.fmt, width: mode.width, height: mode.height, fps });
+  if (cam.capture_node.startsWith('flir_')) {
+    // FLIR: one format/resolution, test each fps independently
+    const seen = new Set();
+    for (const mode of cam.modes) {
+      if (seen.has(mode.fps)) continue;
+      seen.add(mode.fps);
+      combos.push({ fmt: mode.fmt, width: mode.width, height: mode.height, fps: mode.fps });
+    }
+    combos.sort((a, b) => a.fps - b.fps);
+  } else {
+    // UVC: one entry per unique (fmt, width, height), fps = highest available ≤ 10
+    const seen = new Set();
+    for (const mode of cam.modes) {
+      const key = mode.fmt + '|' + mode.width + '|' + mode.height;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const fpsList = cam.modes
+        .filter(m => m.fmt === mode.fmt && m.width === mode.width && m.height === mode.height)
+        .map(m => m.fps);
+      const under = fpsList.filter(f => f <= 10);
+      const fps   = under.length ? Math.max(...under) : 10;
+      combos.push({ fmt: mode.fmt, width: mode.width, height: mode.height, fps });
+    }
   }
   return combos;
 }
